@@ -4,12 +4,20 @@ import pygame
 import pymunk.pygame_util
 import torch
 import pygame_gui
+import os
+import time
 
 # Import our local modules
 import config
 from environment import Environment
 from agent import Agent
 from ai_model import DQNAgent
+
+def scan_for_saved_models():
+    """Scans the saved_models directory for .pth files."""
+    if not os.path.exists('saved_models'):
+        return []
+    return [f for f in os.listdir('saved_models') if f.endswith('.pth')]
 
 def main():
     """
@@ -88,6 +96,33 @@ def main():
                                                manager=ui_manager,
                                                container=editor_panel)
 
+    # --- Gene Library UI Elements (initially visible in setup mode) ---
+    gene_library_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((config.SCREEN_WIDTH - 220, 370), (210, 340)),
+                                                     manager=ui_manager)
+
+    save_skill_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 10), (180, 40)),
+                                                      text='Save Skill',
+                                                      manager=ui_manager,
+                                                      container=gene_library_panel)
+
+    load_skill_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 60), (180, 40)),
+                                                      text='Load Skill',
+                                                      manager=ui_manager,
+                                                      container=gene_library_panel)
+
+    skill_list = pygame_gui.elements.UISelectionList(relative_rect=pygame.Rect((10, 110), (180, 150)),
+                                                     item_list=[], # Will be populated by scanning the directory
+                                                     manager=ui_manager,
+                                                     container=gene_library_panel)
+
+    refresh_skills_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 270), (180, 40)),
+                                                         text='Refresh List',
+                                                         manager=ui_manager,
+                                                         container=gene_library_panel)
+
+    # --- Initial Population of Skill List ---
+    skill_list.set_item_list(scan_for_saved_models())
+
     # --- Main Application Loop ---
     running = True
     while running:
@@ -106,10 +141,12 @@ def main():
                         current_mode = 'simulation_mode'
                         mode_switch_button.set_text('Switch to Setup Mode')
                         editor_panel.hide()
+                        gene_library_panel.hide()
                     else:
                         current_mode = 'setup_mode'
                         mode_switch_button.set_text('Switch to Simulation')
                         editor_panel.show()
+                        gene_library_panel.show()
                 elif event.ui_element == start_button:
                     is_training = True
                     print("Starting training...")
@@ -131,6 +168,21 @@ def main():
                 elif event.ui_element == goal_button:
                     selected_object_type = 'goal'
                     print("Selected object: Goal Zone")
+                elif event.ui_element == refresh_skills_button:
+                    print("Refreshing skill list...")
+                    skill_list.set_item_list(scan_for_saved_models())
+                elif event.ui_element == load_skill_button:
+                    selection = skill_list.get_single_selection()
+                    if selection:
+                        filepath = os.path.join('saved_models', selection)
+                        ai_agent.load_model(filepath)
+                elif event.ui_element == save_skill_button:
+                    timestamp = int(time.time())
+                    filename = f"skill_{timestamp}.pth"
+                    filepath = os.path.join('saved_models', filename)
+                    ai_agent.save_model(filepath)
+                    # Auto-refresh the list after saving
+                    skill_list.set_item_list(scan_for_saved_models())
 
             # Handle object placement in setup mode
             if current_mode == 'setup_mode' and event.type == pygame.MOUSEBUTTONDOWN:

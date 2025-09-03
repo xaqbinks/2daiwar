@@ -175,3 +175,27 @@ class DQNAgent:
         for key in policy_net_state_dict:
             target_net_state_dict[key] = policy_net_state_dict[key]*self.tau + target_net_state_dict[key]*(1-self.tau)
         self.target_net.load_state_dict(target_net_state_dict)
+
+    def save_model(self, filepath):
+        """
+        Saves the state dictionary of the policy network to a file.
+        """
+        print(f"Saving model to {filepath}...")
+        torch.save(self.policy_net.state_dict(), filepath)
+        print("Model saved successfully.")
+
+    def load_model(self, filepath):
+        """
+        Loads a state dictionary from a file into the policy and target networks.
+        """
+        print(f"Loading model from {filepath}...")
+        # Load the state dict, making sure it's mapped to the correct device
+        state_dict = torch.load(filepath, map_location=self.device)
+        self.policy_net.load_state_dict(state_dict)
+        # Sync the target network with the loaded policy network
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        # Set networks to evaluation mode. This is important if they have layers
+        # like Dropout or BatchNorm, which behave differently during training and evaluation.
+        self.policy_net.eval()
+        self.target_net.eval()
+        print("Model loaded successfully.")
