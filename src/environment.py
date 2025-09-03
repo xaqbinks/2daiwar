@@ -1,6 +1,7 @@
 # src/environment.py
 
 import pymunk
+import config
 
 class Environment:
     """
@@ -34,3 +35,16 @@ class Environment:
         Returns the list of static shapes for rendering.
         """
         return self._static_shapes
+
+    def add_goal_zone(self, position, size):
+        """
+        Adds a sensor shape that acts as the goal zone.
+        """
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        body.position = position
+        shape = pymunk.Poly.create_box(body, size)
+        shape.sensor = True # Makes it a sensor so it doesn't cause collisions
+        shape.collision_type = config.COLLISION_TYPE_GOAL
+        shape.color = config.COLOR_GOAL # For debug drawing
+        self.space.add(body, shape)
+        return shape

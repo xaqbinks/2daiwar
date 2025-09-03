@@ -3,6 +3,7 @@
 import pygame
 import pymunk.pygame_util
 import torch
+import pygame_gui
 
 # Import our local modules
 import config
@@ -12,103 +13,195 @@ from ai_model import DQNAgent
 
 def main():
     """
-    Main function to run the AI training loop.
+    Main function to run the application.
     """
-    # --- Pygame and Environment Setup ---
-    # We still use pygame for rendering the simulation, even during training
     pygame.init()
     screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
-    pygame.display.set_caption("Py-AI Warehouse - Training")
+    pygame.display.set_caption("Py-AI Warehouse")
     clock = pygame.time.Clock()
+
+    # --- UI Manager Setup ---
+    ui_manager = pygame_gui.UIManager((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+
+    # --- Environment and Agent Setup ---
     env = Environment()
-
     # Add static boundaries to the environment
-    # Floor
-    env.add_static_segment((0, config.SCREEN_HEIGHT - 5), (config.SCREEN_WIDTH, config.SCREEN_HEIGHT - 5))
-    # Left wall
-    env.add_static_segment((5, 0), (5, config.SCREEN_HEIGHT))
-    # Right wall
-    env.add_static_segment((config.SCREEN_WIDTH - 5, 0), (config.SCREEN_WIDTH - 5, config.SCREEN_HEIGHT))
-    # Ceiling
-    env.add_static_segment((0, 5), (config.SCREEN_WIDTH, 5))
+    env.add_static_segment((0, config.SCREEN_HEIGHT - 5), (config.SCREEN_WIDTH, config.SCREEN_HEIGHT - 5)) # Floor
+    env.add_static_segment((5, 0), (5, config.SCREEN_HEIGHT)) # Left wall
+    env.add_static_segment((config.SCREEN_WIDTH - 5, 0), (config.SCREEN_WIDTH - 5, config.SCREEN_HEIGHT)) # Right wall
+    env.add_static_segment((0, 5), (config.SCREEN_WIDTH, 5)) # Ceiling
 
-    # --- Agent and AI Setup ---
     agent = Agent(env.space, start_pos=(100, config.SCREEN_HEIGHT - 100))
+
+    # The AI Agent is set up but not used until we are in simulation mode
     ai_agent = DQNAgent(agent.n_observations, agent.n_actions)
-    device = ai_agent.device  # Use the same device as the AI agent
 
-    # --- Training Parameters ---
-    num_episodes = 500
-    max_steps_per_episode = 1000
+    # --- Goal and Collision Handling Setup ---
+    goal_zone = env.add_goal_zone(position=(config.SCREEN_WIDTH - 100, config.SCREEN_HEIGHT / 2), size=(50, 100))
 
-    # --- Main Training Loop ---
-    for i_episode in range(num_episodes):
-        agent.reset()
-        state_tuple = agent.get_state()
-        state = torch.tensor(state_tuple, dtype=torch.float32, device=device).unsqueeze(0)
+    def goal_reached_handler(arbiter, space, data):
+        data["agent_reached_goal"] = True
+        return True
 
-        total_reward = 0
+    handler_data = {"agent_reached_goal": False}
 
-        for t in range(max_steps_per_episode):
-            # Select and perform an action
-            action = ai_agent.select_action(state)
-            agent.perform_action(action.item())
+    # The 'begin' function is called at the start of a collision. We pass our
+    # mutable 'handler_data' dict to it using a lambda.
+    env.space.on_collision(
+        config.COLLISION_TYPE_AGENT,
+        config.COLLISION_TYPE_GOAL,
+        begin=lambda arbiter, space, data: goal_reached_handler(arbiter, space, handler_data)
+    )
 
-            # Step the physics simulation
-            env.space.step(1.0 / config.FPS)
+    # --- Application State ---
+    current_mode = 'setup_mode' # Start in setup mode
+    is_training = False
+    is_paused = False
+    episode_counter = 0
+    selected_object_type = None # For the editor
 
-            # Observe new state and determine reward and done flag
-            next_state_tuple = agent.get_state()
+    # --- UI Elements ---
+    mode_switch_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 10), (180, 40)),
+                                                     text='Switch to Simulation',
+                                                     manager=ui_manager)
+    start_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((200, 10), (150, 40)),
+                                                  text='Start Training',
+                                                  manager=ui_manager)
+    pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((360, 10), (100, 40)),
+                                                 text='Pause',
+                                                 manager=ui_manager)
+    reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((470, 10), (100, 40)),
+                                                 text='Reset',
+                                                 manager=ui_manager)
 
-            # This is the core of the reward function for this task
-            done = agent.torso_body.position.x >= config.SCREEN_WIDTH - 50
+    # --- Editor UI Elements (initially visible in setup mode) ---
+    editor_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((config.SCREEN_WIDTH - 220, 60), (210, 300)),
+                                               manager=ui_manager)
 
-            # --- Reward Calculation ---
-            # Define the components of our reward function
-            goal_reward = 100.0
-            living_penalty = -0.1 # Small penalty for each step to encourage speed
-            distance_reward_factor = 100.0 # Scales the reward for moving right
+    wall_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 10), (180, 40)),
+                                                text='Select Wall',
+                                                manager=ui_manager,
+                                                container=editor_panel)
 
-            if done:
-                reward = goal_reward
-            else:
-                # Reward for moving closer to the goal (shaping reward)
-                distance_reward = (next_state_tuple[0] - state_tuple[0]) * distance_reward_factor
-                reward = distance_reward + living_penalty
+    goal_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 60), (180, 40)),
+                                               text='Select Goal Zone',
+                                               manager=ui_manager,
+                                               container=editor_panel)
 
-            total_reward += reward
-            reward_tensor = torch.tensor([reward], device=device)
-            done_tensor = torch.tensor([done], device=device)
+    # --- Main Application Loop ---
+    running = True
+    while running:
+        time_delta = clock.tick(config.FPS) / 1000.0
 
-            if done:
-                next_state = None
-            else:
-                next_state = torch.tensor(next_state_tuple, dtype=torch.float32, device=device).unsqueeze(0)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-            # Store the transition in the AI's memory
-            ai_agent.memory.push(state, action, next_state, reward_tensor, done_tensor)
+            # Pass events to the UI manager
+            ui_manager.process_events(event)
 
-            # Move to the next state
-            state = next_state
-            state_tuple = next_state_tuple
+            if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                if event.ui_element == mode_switch_button:
+                    if current_mode == 'setup_mode':
+                        current_mode = 'simulation_mode'
+                        mode_switch_button.set_text('Switch to Setup Mode')
+                        editor_panel.hide()
+                    else:
+                        current_mode = 'setup_mode'
+                        mode_switch_button.set_text('Switch to Simulation')
+                        editor_panel.show()
+                elif event.ui_element == start_button:
+                    is_training = True
+                    print("Starting training...")
+                elif event.ui_element == pause_button:
+                    is_paused = not is_paused
+                    pause_button.set_text('Resume' if is_paused else 'Pause')
+                    print("Training paused" if is_paused else "Training resumed.")
+                elif event.ui_element == reset_button:
+                    agent.reset()
+                    handler_data["agent_reached_goal"] = False
+                    episode_counter = 0
+                    is_training = False
+                    is_paused = False
+                    pause_button.set_text('Pause')
+                    print("Agent and training progress have been reset.")
+                elif event.ui_element == wall_button:
+                    selected_object_type = 'wall'
+                    print("Selected object: Wall")
+                elif event.ui_element == goal_button:
+                    selected_object_type = 'goal'
+                    print("Selected object: Goal Zone")
 
-            # Perform one step of the optimization
-            ai_agent.learn()
+            # Handle object placement in setup mode
+            if current_mode == 'setup_mode' and event.type == pygame.MOUSEBUTTONDOWN:
+                # Check if the click was on the main screen, not on a UI element
+                if not ui_manager.get_focus_set():
+                    if selected_object_type == 'wall':
+                        # A simple horizontal wall segment
+                        start_pos = (event.pos[0] - 40, event.pos[1])
+                        end_pos = (event.pos[0] + 40, event.pos[1])
+                        env.add_static_segment(start_pos, end_pos)
+                        print(f"Placed Wall at {event.pos}")
+                    elif selected_object_type == 'goal':
+                        env.add_goal_zone(position=event.pos, size=(50, 100))
+                        print(f"Placed Goal Zone at {event.pos}")
 
-            # Render the environment every N episodes to check progress
-            if i_episode % 20 == 0:
-                screen.fill(config.COLOR_BACKGROUND)
-                env.space.debug_draw(pymunk.pygame_util.DrawOptions(screen))
-                pygame.display.flip()
-                clock.tick(config.FPS)
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        return # Exit training early
 
-            if done:
-                break
+        # --- Mode-Specific Logic ---
+        if current_mode == 'setup_mode':
+            # In setup mode, we will handle object placement and UI interaction
+            pass # Logic is now handled in the event loop
+        elif current_mode == 'simulation_mode':
+            if not is_paused:
+                # Always step the physics simulation if we are in sim mode and not paused
+                env.space.step(1.0 / config.FPS)
 
-        print(f"Episode {i_episode+1}/{num_episodes} | Total Reward: {total_reward:.2f}")
+                if is_training:
+                    # If training is active, perform one step of the learning process
+                    state_tuple = agent.get_state()
+                    state = torch.tensor(state_tuple, dtype=torch.float32, device=ai_agent.device).unsqueeze(0)
+
+                    action = ai_agent.select_action(state)
+                    agent.perform_action(action.item())
+
+                    next_state_tuple = agent.get_state()
+                    done = handler_data["agent_reached_goal"]
+
+                    goal_reward = 100.0
+                    living_penalty = -0.1
+                    distance_reward_factor = 100.0
+                    if done:
+                        reward = goal_reward
+                    else:
+                        distance_reward = (next_state_tuple[0] - state_tuple[0]) * distance_reward_factor
+                        reward = distance_reward + living_penalty
+
+                    reward_tensor = torch.tensor([reward], device=ai_agent.device)
+                    done_tensor = torch.tensor([done], device=ai_agent.device)
+                    next_state = None if done else torch.tensor(next_state_tuple, dtype=torch.float32, device=ai_agent.device).unsqueeze(0)
+
+                    ai_agent.memory.push(state, action, next_state, reward_tensor, done_tensor)
+                    ai_agent.learn()
+
+                    if done:
+                        episode_counter += 1
+                        print(f"Episode {episode_counter} finished.")
+                        agent.reset()
+                        handler_data["agent_reached_goal"] = False
+
+        # Update the UI Manager
+        ui_manager.update(time_delta)
+
+        # --- Drawing ---
+        screen.fill(config.COLOR_BACKGROUND)
+
+        # Draw the physics space
+        env.space.debug_draw(pymunk.pygame_util.DrawOptions(screen))
+
+        # Draw the UI
+        ui_manager.draw_ui(screen)
+
+        pygame.display.flip()
 
     pygame.quit()
 

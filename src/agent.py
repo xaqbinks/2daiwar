@@ -28,7 +28,7 @@ class Agent:
         torso_shape = pymunk.Poly.create_box(self.torso_body, torso_size)
         torso_shape.friction = 0.8
         torso_shape.elasticity = 0.1
-        torso_shape.collision_type = 1 # Assign a collision type for the agent
+        torso_shape.collision_type = config.COLLISION_TYPE_AGENT
 
         # --- Create the agent's head ---
         head_mass = 2
@@ -43,7 +43,7 @@ class Agent:
         head_shape = pymunk.Circle(self.head_body, head_radius)
         head_shape.friction = 0.6
         head_shape.elasticity = 0.1
-        head_shape.collision_type = 1 # Assign a collision type for the agent
+        head_shape.collision_type = config.COLLISION_TYPE_AGENT
 
         # --- Connect the body parts ---
         # Connect the head to the torso with a pivot joint.
