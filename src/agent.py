@@ -61,6 +61,7 @@ class Agent:
 
         # Store the parts and joints for easy access
         self.body_parts = [self.torso_body, self.head_body]
+        self.shapes = [torso_shape, head_shape]
         self.joints = [head_joint]
 
         # --- For state and action ---
@@ -124,9 +125,17 @@ class Agent:
     def jump(self):
         """
         Applies a vertical impulse to the agent's torso to make it jump.
+        Uses a raycast to check for ground beneath the agent.
         """
-        # A simple check to see if the agent is on the ground before allowing a jump.
-        # This can be made more sophisticated later (e.g., using raycasts).
-        if abs(self.torso_body.velocity.y) < 1:
+        # Raycast downwards from the center of the torso.
+        # The ray is slightly longer than half the torso height to ensure it can detect the ground.
+        ray_start = self.torso_body.position
+        ray_end = self.torso_body.position - (0, self.torso_size[1] * 0.6)
+
+        # We use a generic shape filter. The result is checked against our own shapes.
+        query_info = self.space.segment_query_first(ray_start, ray_end, 1, pymunk.ShapeFilter())
+
+        # Check if the ray hit something, and that it wasn't one of our own shapes
+        if query_info is not None and query_info.shape not in self.shapes:
             impulse = (0, -8000) # Negative impulse is upwards
             self.torso_body.apply_impulse_at_local_point(impulse, (0, 0))

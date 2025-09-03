@@ -7,6 +7,7 @@ import pygame_gui
 import os
 import time
 import json
+import math
 
 # Import our local modules
 import config
@@ -26,10 +27,24 @@ def scan_for_challenges():
         return []
     return [f for f in os.listdir('challenges') if f.endswith('.json')]
 
+def show_message_box(manager, title, message):
+    """Helper function to show a message window."""
+    pygame_gui.windows.UIMessageWindow(
+        rect=pygame.Rect((config.SCREEN_WIDTH / 2 - 150, config.SCREEN_HEIGHT / 2 - 100), (300, 200)),
+        html_message=message,
+        manager=manager,
+        window_title=title
+    )
+
 def main():
     """
     Main function to run the application.
     """
+    # --- Ensure directories exist ---
+    os.makedirs("saved_models", exist_ok=True)
+    os.makedirs("scenes", exist_ok=True)
+    os.makedirs("challenges", exist_ok=True)
+
     pygame.init()
     screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
     pygame.display.set_caption("Py-AI Warehouse")
@@ -96,6 +111,15 @@ def main():
     reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((470, 10), (100, 40)),
                                                  text='Reset',
                                                  manager=ui_manager)
+
+    # --- Stats UI Elements ---
+    stats_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((580, 10), (250, 100)),
+                                              manager=ui_manager)
+
+    episode_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((10, 10), (220, 20)),
+                                                text="Episode: 0", manager=ui_manager, container=stats_panel)
+    epsilon_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((10, 40), (220, 20)),
+                                                text="Epsilon: 0.00", manager=ui_manager, container=stats_panel)
 
     # --- Editor UI Elements (initially visible in setup mode) ---
     editor_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((config.SCREEN_WIDTH - 220, 60), (210, 350)),
@@ -225,7 +249,7 @@ def main():
                     print("Selected object: Box")
                 elif event.ui_element == clear_button:
                     env.clear_dynamic_objects()
-                    print("Cleared all dynamic objects from the scene.")
+                    show_message_box(ui_manager, "Success", "Scene cleared.")
                 elif event.ui_element == save_scene_button:
                     file_dialog = pygame_gui.windows.UIFileDialog(
                         rect=pygame.Rect((config.SCREEN_WIDTH / 2 - 200, config.SCREEN_HEIGHT / 2 - 150), (400, 300)),
@@ -237,34 +261,25 @@ def main():
                         manager=ui_manager, window_title="Load Scene...", initial_file_path="scenes/",
                         allow_existing_files_only=True)
                 elif event.ui_element == refresh_skills_button:
-                    print("Refreshing skill list...")
                     skill_list.set_item_list(scan_for_saved_models())
                 elif event.ui_element == load_skill_button:
                     selection = skill_list.get_single_selection()
                     if selection:
                         filepath = os.path.join('saved_models', selection)
                         ai_agent.load_model(filepath)
+                        show_message_box(ui_manager, "Success", f"Skill '{selection}' loaded.")
                 elif event.ui_element == save_skill_button:
                     if save_window is None:
                         save_window = pygame_gui.windows.UIWindow(
                             rect=pygame.Rect((config.SCREEN_WIDTH / 2 - 150, config.SCREEN_HEIGHT / 2 - 100), (300, 200)),
-                            manager=ui_manager,
-                            window_display_title="Save Skill As..."
-                        )
+                            manager=ui_manager, window_display_title="Save Skill As...")
 
                         text_entry = pygame_gui.elements.UITextEntryLine(
-                            relative_rect=pygame.Rect((10, 10), (260, 40)),
-                            manager=ui_manager,
-                            container=save_window
-                        )
+                            relative_rect=pygame.Rect((10, 10), (260, 40)), manager=ui_manager, container=save_window)
 
                         confirm_save_button = pygame_gui.elements.UIButton(
-                            relative_rect=pygame.Rect((10, 60), (100, 40)),
-                            text="Confirm",
-                            manager=ui_manager,
-                            container=save_window,
-                            object_id="#confirm_save_button"
-                        )
+                            relative_rect=pygame.Rect((10, 60), (100, 40)), text="Confirm", manager=ui_manager,
+                            container=save_window, object_id="#confirm_save_button")
                 elif event.ui_element == load_challenge_button:
                     selection = challenge_list.get_single_selection()
                     if selection:
@@ -272,10 +287,9 @@ def main():
                         with open(filepath, 'r') as f:
                             scene_data = json.load(f)
                         env.load_from_data(scene_data)
-                        print(f"Challenge '{selection}' loaded.")
+                        show_message_box(ui_manager, "Success", f"Challenge '{selection}' loaded.")
 
             if event.type == pygame_gui.UI_BUTTON_PRESSED and event.ui_object_id == 'window.#confirm_save_button':
-                # This event comes from the button inside the save window
                 text_entry = [c for c in save_window.get_container().elements if isinstance(c, pygame_gui.elements.UITextEntryLine)][0]
                 filename = text_entry.get_text()
                 if filename:
@@ -284,6 +298,7 @@ def main():
                     filepath = os.path.join('saved_models', filename)
                     ai_agent.save_model(filepath)
                     skill_list.set_item_list(scan_for_saved_models())
+                    show_message_box(ui_manager, "Success", f"Skill '{filename}' saved.")
                     save_window.kill()
                     save_window = None
 
@@ -299,13 +314,13 @@ def main():
                     scene_data = env.get_serializable_data()
                     with open(filepath, 'w') as f:
                         json.dump(scene_data, f, indent=4)
-                    print(f"Scene saved to {filepath}")
+                    show_message_box(ui_manager, "Success", "Scene saved.")
                 elif "Load Scene..." in event.ui_element.window_title:
                     filepath = event.text
                     with open(filepath, 'r') as f:
                         scene_data = json.load(f)
                     env.load_from_data(scene_data)
-                    print(f"Scene loaded from {filepath}")
+                    show_message_box(ui_manager, "Success", "Scene loaded.")
 
             # Handle object placement in setup mode
             if current_mode == 'setup_mode' and event.type == pygame.MOUSEBUTTONDOWN:
@@ -360,6 +375,12 @@ def main():
 
                     ai_agent.memory.push(state, action, next_state, reward_tensor, done_tensor)
                     ai_agent.learn()
+
+                    # Update Stats UI
+                    eps_threshold = ai_agent.eps_end + (ai_agent.eps_start - ai_agent.eps_end) * \
+                        math.exp(-1. * ai_agent.steps_done / ai_agent.eps_decay)
+                    episode_label.set_text(f"Episode: {episode_counter}")
+                    epsilon_label.set_text(f"Epsilon: {eps_threshold:.3f}")
 
                     if done:
                         episode_counter += 1
