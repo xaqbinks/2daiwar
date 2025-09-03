@@ -1,0 +1,5 @@
+[
+    {"type": "wall", "start": [100, 600], "end": [400, 600]},
+    {"type": "wall", "start": [600, 600], "end": [900, 600]},
+    {"type": "goal", "position": [800, 650], "size": [50, 100]}
+]
