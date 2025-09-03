@@ -7,6 +7,7 @@ import pymunk.pygame_util
 # Import our local modules
 import config
 from environment import Environment
+from agent import Agent
 
 def main():
     """
@@ -27,6 +28,9 @@ def main():
     # Create the environment
     env = Environment()
 
+    # Create the agent
+    agent = Agent(env.space, start_pos=(100, config.SCREEN_HEIGHT - 100))
+
     # Add static boundaries to the environment
     # Floor
     env.add_static_segment((0, config.SCREEN_HEIGHT - 5), (config.SCREEN_WIDTH, config.SCREEN_HEIGHT - 5))
@@ -45,8 +49,18 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_UP:
+                    agent.jump()
+
+        # Handle continuous key presses for movement
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            agent.move(-1)
+        if keys[pygame.K_RIGHT]:
+            agent.move(1)
 
         # Clear the screen with the background color
         screen.fill(config.COLOR_BACKGROUND)
