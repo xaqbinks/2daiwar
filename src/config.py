@@ -11,7 +11,7 @@ FPS = 60
 COLOR_BLACK = (0, 0, 0)
 COLOR_WHITE = (255, 255, 255)
 COLOR_BACKGROUND = (217, 217, 217) # A light grey
-COLOR_STATIC = (45, 45, 45)       # A dark grey for walls/floor
+COLOR_STATIC = (45, 45, 45, 255)  # A dark grey for walls/floor
 COLOR_GOAL = (0, 255, 0, 100)     # Transparent green for goal zone
 
 # --- Physics Collision Types ---

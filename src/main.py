@@ -306,7 +306,7 @@ def main():
                 if save_window is not None and event.ui_element == save_window:
                     save_window = None
 
-            if event.type == pygame_gui.UI_FILE_DIALOG_PATH_CHOSEN:
+            if event.type == pygame_gui.UI_FILE_DIALOG_PATH_PICKED:
                 if "Save Scene..." in event.ui_element.window_title:
                     filepath = event.text
                     if not filepath.endswith(".json"):
