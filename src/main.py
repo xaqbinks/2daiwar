@@ -99,27 +99,33 @@ def main():
     save_window = None
 
     # --- UI Elements ---
+    # Top bar controls
     mode_switch_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((10, 10), (180, 40)),
                                                      text='Switch to Simulation',
                                                      manager=ui_manager)
-    start_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((200, 10), (150, 40)),
-                                                  text='Start Training',
-                                                  manager=ui_manager)
-    pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((360, 10), (100, 40)),
-                                                 text='Pause',
-                                                 manager=ui_manager)
-    reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((470, 10), (100, 40)),
-                                                 text='Reset',
-                                                 manager=ui_manager)
+
+    # Simulation controls (in a panel, initially hidden)
+    sim_controls_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((200, 10), (370, 60)),
+                                                     manager=ui_manager, visible=False,
+                                                     object_id="#sim_controls")
+    start_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((0, 0), (150, 40)),
+                                                  text='Start Training', manager=ui_manager, container=sim_controls_panel)
+    pause_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((160, 0), (100, 40)),
+                                                 text='Pause', manager=ui_manager, container=sim_controls_panel)
+    reset_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((270, 0), (100, 40)),
+                                                 text='Reset', manager=ui_manager, container=sim_controls_panel)
 
     # --- Stats UI Elements ---
-    stats_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((580, 10), (250, 100)),
-                                              manager=ui_manager)
+    stats_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((580, 10), (250, 130)),
+                                              manager=ui_manager, visible=False)
 
     episode_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((10, 10), (220, 20)),
                                                 text="Episode: 0", manager=ui_manager, container=stats_panel)
     epsilon_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((10, 40), (220, 20)),
                                                 text="Epsilon: 0.00", manager=ui_manager, container=stats_panel)
+
+    action_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((10, 70), (220, 20)),
+                                               text="Last Action: None", manager=ui_manager, container=stats_panel)
 
     # --- Editor UI Elements (initially visible in setup mode) ---
     editor_panel = pygame_gui.elements.UIPanel(relative_rect=pygame.Rect((config.SCREEN_WIDTH - 220, 60), (210, 350)),
@@ -217,14 +223,21 @@ def main():
                         editor_panel.hide()
                         gene_library_panel.hide()
                         challenge_panel.hide()
+                        sim_controls_panel.show()
+                        stats_panel.show()
                     else:
                         current_mode = 'setup_mode'
                         mode_switch_button.set_text('Switch to Simulation')
                         editor_panel.show()
                         gene_library_panel.show()
                         challenge_panel.show()
+                        sim_controls_panel.hide()
+                        stats_panel.hide()
                 elif event.ui_element == start_button:
                     is_training = True
+                    # Set the networks to training mode
+                    ai_agent.policy_net.train()
+                    ai_agent.target_net.train()
                     print("Starting training...")
                 elif event.ui_element == pause_button:
                     is_paused = not is_paused
@@ -356,6 +369,7 @@ def main():
 
                     action = ai_agent.select_action(state)
                     agent.perform_action(action.item())
+                    action_label.set_text(f"Last Action: {agent.action_space[action.item()]}")
 
                     next_state_tuple = agent.get_state()
                     done = handler_data["agent_reached_goal"]

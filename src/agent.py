@@ -119,7 +119,7 @@ class Agent:
         :param direction: An integer, -1 for left, 1 for right.
         """
         # Apply a force to the center of the torso
-        force = (4000 * direction, 0)
+        force = (8000 * direction, 0)
         self.torso_body.apply_force_at_local_point(force, (0, 0))
 
     def jump(self):
